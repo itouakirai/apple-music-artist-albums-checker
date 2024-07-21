@@ -7,6 +7,21 @@ from tqdm import tqdm
 import concurrent.futures
 from urllib.parse import unquote
 
+#获取专辑真实曲目数
+def fetch_track_count(href):
+    response = None
+    url = f"https://amp-api.music.apple.com/{href}"
+    while True:
+        try:
+            getresponse = requests.get(url, headers=headers)
+            if getresponse.status_code == 200:
+                response = getresponse.json()
+                break
+        except requests.RequestException as e:
+            print(f"Request {href} failed: {e}")
+    track_count = len(response["data"][0]["relationships"]["tracks"]["data"])
+    return track_count
+
 #获取函数
 def fetch_albums_and_songs(storefront):
     global albums_data, album_id_list
@@ -33,7 +48,8 @@ def fetch_albums_and_songs(storefront):
         for data in response["data"]:
             album_id = data["id"]
 	  #计划添加的track_count
-            track_count = data["attributes"]["trackCount"]
+            href = data["href"]
+            track_count = fetch_track_count(href)
             album_name = data["attributes"]["name"]
             album_url = data["attributes"]["url"]
             upc = data["attributes"]["upc"]
@@ -70,7 +86,8 @@ def fetch_albums_and_songs(storefront):
         for data in response["data"]:
             album_name = data["attributes"]["albumName"]
             album_url = data["attributes"]["url"]
-            track_count = data["attributes"]["trackCount"]
+            href = data["href"]
+            track_count = fetch_track_count(href)
             upc = data["attributes"]["upc"]
             releaseDate = data["attributes"]["releaseDate"]
             pattern = re.compile(r'^(?:https:\/\/(?:beta\.music|music)\.apple\.com\/(\w{2})(?:\/album|\/album\/.+))\/(?:id)?(\d[^\D]+)(?:$|\?)')
@@ -144,7 +161,7 @@ headers["authorization"] = 'Bearer ' + token
 albums_data = {}
 album_id_list = {}
 #执行查询
-with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
     future_to_storefront = {executor.submit(fetch_albums_and_songs, storefront): storefront for storefront in storefronts}
     for future in tqdm(concurrent.futures.as_completed(future_to_storefront), total=len(storefronts), desc="检测"):
         continue
